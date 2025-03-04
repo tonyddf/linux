@@ -6,11 +6,11 @@
   tasks:
     - name: Set the path for the chain of validation
       ansible.builtin.set_fact:
-        pathChainValidation: "{{ pathChainValidation | default('Public-Digital-Signature-Libra-EMS-TEST.alfa.local_CA_chain.crt') }}"
+        pathChainValidation: "{{ pathChainValidation | default('/tmp/Digital-Signature-public-chain-EQ-ASE-EMS-PROD.alfa.local.crt') }}"
 
     - name: Set the path for the leaf certificate
       ansible.builtin.set_fact:
-        pathLeafCertificate: "{{ pathLeafCertificate | default('Public-Digital-Signature-Libra-EMS-TEST.alfa.local.crt') }}"
+        pathLeafCertificate: "{{ pathLeafCertificate | default('/tmp/Digital-Signature-public-leaf-EQ-ASE-EMS-PROD.alfa.local.crt') }}"
 
     - name: Set the path for a temporary file to contain the contents of the new certificate
       ansible.builtin.set_fact:
@@ -24,12 +24,12 @@
 
     - name: Place the chain of validation in the new certificate
       ansible.builtin.copy:
-        src: {{ pathChainValidation }} 
-        dest: {{ pathNewCertificate }} 
+        src: "{{ pathChainValidation }}" 
+        dest: "{{ pathNewCertificate }}"
 
     - name: Place the leaf certificate in the new certificate
       ansible.builtin.shell:
-        cmd: openssl x509 -in {{ pathLeafCertificate }} >> {{ pathNewCertificate }} 
+        cmd: "openssl x509 -in {{ pathLeafCertificate }} >> {{ pathNewCertificate }}"
 
 
 - name: Deploy certificate in parallel with the old certificate
@@ -49,22 +49,34 @@
       ansible.builtin.set_fact:
         pathBackupCertificate: "{{ pathBackupCertificate | default('/opt/osi/monarch/data/tennet_aos/certs/chain_rev.bak') }}"
 
+    - name: Transfer the new certificate to the remote hose
+      ansible.builtin.copy:
+        src: "{{ pathNewCertificate }}"
+        dest: "{{ pathNewCertificate }}"
+        mode: "0644"
+
     - name: Make a backup of the certificate in use
       ansible.builtin.copy:
         src: "{{ pathCertificate }}"
         dest: "{{ pathBackupCertificate }}"
+        remote_src: yes
+        mode: "0644"
       register: file_creation
 
     - name: Exit the playbook if the backup file is not created
       ansible.builtin.fail:
         msg: "The backup file '{{ pathBackupCertificate }}' was not created. Please ensure the operation is possible and try again."
-      when: not file_creation['stat']['exists']
+      when: not file_creation['state']=="file"
 
     - name: Copy the contents of the new certificate to the certificate in use
       ansible.builtin.shell:
         cmd: "cat {{ pathNewCertificate }} >> {{ pathCertificate }}"
-      when: file_creation['stat']['exists']
+      when: file_creation['state']=="file"
 
+    - name: Clean the new certificate file from the remote host
+      ansible.builtin.file:
+        path: "{{ pathNewCertificate }}"
+        state: absent
 
 - name: Deploy certificate and clean backup
   hosts: all
@@ -87,6 +99,7 @@
       ansible.builtin.copy:
         src: "{{ pathNewCertificate }}"
         dest: "{{ pathCertificate }}"
+        mode: "0644"
       register: file_creation
 
     - name: Delete the backup file
