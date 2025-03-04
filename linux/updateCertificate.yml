@@ -1,6 +1,6 @@
 ---
-- name: Set global variables for the playbook
-  hosts: all
+- name: Set global variables for the localhost
+  hosts: localhost
   tags: always
   tasks:
     - name: Set the path for the chain of validation
@@ -11,6 +11,14 @@
       ansible.builtin.set_fact:
         pathLeafCertificate: "{{ pathLeafCertificate | default('/tmp/Digital-Signature-public-leaf-EQ-ASE-EMS-PROD.alfa.local.crt') }}"
 
+    - name: Set the path for a temporary file to contain the contents of the new certificate
+      ansible.builtin.set_fact:
+        pathNewCertificate: "{{ pathNewCertificate | default('/tmp/chain_rev.new') }}"
+
+- name: Set global variables for the remote host
+  hosts: all
+  tags: always
+  tasks:
     - name: Set the path for a temporary file to contain the contents of the new certificate
       ansible.builtin.set_fact:
         pathNewCertificate: "{{ pathNewCertificate | default('/tmp/chain_rev.new') }}"
@@ -28,8 +36,11 @@
 - name: Create new certificate
   hosts: localhost
   tags: create
-
   tasks:
+    - name: Check existence of the variable
+      ansible.builtin.debug:
+        var: pathNewCertificate
+
     - name: Create a file for holding the new certificate
       ansible.builtin.file:
         path: "{{ pathNewCertificate }}"
@@ -49,7 +60,6 @@
 - name: Deploy certificate in parallel with the old certificate
   hosts: all
   tags: parallel
-
   tasks:
     - name: Make a backup of the certificate in use
       ansible.builtin.copy:
@@ -82,15 +92,26 @@
   tags: clean
 
   tasks:
+    - name: Make a backup of the certificate in use
+      ansible.builtin.copy:
+        src: "{{ pathCertificate }}"
+        dest: "{{ pathBackupCertificate }}"
+        remote_src: yes
+        mode: "0644"
+      register: backup_creation
+
+    - name: Exit the playbook if the backup file is not created
+      ansible.builtin.fail:
+        msg: "The backup file '{{ pathBackupCertificate }}' was not created. Please ensure the operation is possible and try again."
+      when: not backup_creation['state']=="file"
+
+    - name: Debug contents of local file
+      ansible.builtin.debug:
+        msg: "{{ lookup('file', pathNewCertificate) }}"
+
     - name: Copy the contents of the new certificate to the certificate in use
       ansible.builtin.copy:
         src: "{{ pathNewCertificate }}"
         dest: "{{ pathCertificate }}"
         mode: "0644"
-      register: file_creation
-
-    - name: Delete the backup file
-      ansible.builtin.file:
-        path: "{{ pathBackupCertificate }}"
-        state: absent
-      when: file_creation['state']=='file'
+      when: backup_creation['state']=="file"
