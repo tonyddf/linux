@@ -1,8 +1,6 @@
 ---
-- name: Create new certificate
+- name: Set global variables for the playbook
   hosts: localhost
-  tags: create
-
   tasks:
     - name: Set the path for the chain of validation
       ansible.builtin.set_fact:
@@ -16,6 +14,19 @@
       ansible.builtin.set_fact:
         pathNewCertificate: "{{ pathNewCertificate | default('/tmp/chain_rev.new') }}"
 
+    - name: Set the path for the certificate in use
+      ansible.builtin.set_fact:
+        pathCertificate: "{{ pathCertificate | default('/opt/osi/monarch/data/tennet_aos/certs/chain_rev.pem') }}"
+
+    - name: Set the path for the backup certificate
+      ansible.builtin.set_fact:
+        pathBackupCertificate: "{{ pathBackupCertificate | default('/opt/osi/monarch/data/tennet_aos/certs/chain_rev.bak') }}"
+
+- name: Create new certificate
+  hosts: localhost
+  tags: create
+
+  tasks:
     - name: Create a file for holding the new certificate
       ansible.builtin.file:
         path: "{{ pathNewCertificate }}"
@@ -37,18 +48,6 @@
   tags: parallel
 
   tasks:
-    - name: Set the path for the new certificate
-      ansible.builtin.set_fact:
-        pathNewCertificate: "{{ pathNewCertificate | default('/tmp/chain_rev.new') }}"
-
-    - name: Set the path for the certificate in use
-      ansible.builtin.set_fact:
-        pathCertificate: "{{ pathCertificate | default('/opt/osi/monarch/data/tennet_aos/certs/chain_rev.pem') }}"
-
-    - name: Set the path for the backup certificate
-      ansible.builtin.set_fact:
-        pathBackupCertificate: "{{ pathBackupCertificate | default('/opt/osi/monarch/data/tennet_aos/certs/chain_rev.bak') }}"
-
     - name: Transfer the new certificate to the remote hose
       ansible.builtin.copy:
         src: "{{ pathNewCertificate }}"
@@ -83,18 +82,6 @@
   tags: clean
 
   tasks:
-    - name: Set the path for the new certificate
-      ansible.builtin.set_fact:
-        pathNewCertificate: "{{ pathNewCertificate | default('/tmp/chain_rev.new') }}"
-
-    - name: Set the path for the certificate in use
-      ansible.builtin.set_fact:
-        pathCertificate: "{{ pathCertificate | default('/opt/osi/monarch/data/tennet_aos/certs/chain_rev.pem') }}"
-
-    - name: Set the path for the backup certificate
-      ansible.builtin.set_fact:
-        pathBackupCertificate: "{{ pathBackupCertificate | default('/opt/osi/monarch/data/tennet_aos/certs/chain_rev.bak') }}"
-
     - name: Copy the contents of the new certificate to the certificate in use
       ansible.builtin.copy:
         src: "{{ pathNewCertificate }}"
