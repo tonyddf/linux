@@ -108,6 +108,7 @@
     - name: Debug contents of local file
       ansible.builtin.debug:
         msg: "{{ lookup('file', pathNewCertificate) }}"
+      delegate_to: localhost
 
     - name: Copy the contents of the new certificate to the certificate in use
       ansible.builtin.copy:
