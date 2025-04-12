@@ -27,12 +27,12 @@ if [ $? != 0 ]
 then
 	# Create new session and two windows
 	tmux new-session -s "${SESSION}" -n "${WINDOW1}" -d
-	tmux new-window -t "${SESSION}" -n "${WINDOW2}"
 
 fi
 
 # Split last window in four panes
-tmux select-window -t "${SESSION}":"${WINDOW2}"
+tmux new-window -t "${SESSION}" -n "${WINDOWN}"
+tmux select-window -t "${SESSION}":"${WINDOWN}"
 tmux split-window -h \; split-window -v \; select-pane -t 0 \; split-window -v
 tmux select-pane -t 0
 
