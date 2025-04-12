@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 #### INFO #################################################################
-##  Usage: start or attach to a tmux personal session in socket /tmp/tmux-<user id>/default
-##
+##  Usage: start or attach to a tmux personal session in socket /tmp/tmux-<user id>/default with two windows,
+##  if ran again, create an additional window split in 4
 ##  Execute from command line only
 ##  Run as own user
 ##
