@@ -1,27 +1,40 @@
-#!/bin/sh
+#!/usr/bin/env bash
+#### INFO #################################################################
+##  Usage: start or attach to a tmux personal session in socket /tmp/tmux-<user id>/default
+##
+##  Execute from command line only
+##  Run as own user
+##
+##  VERSION DATE      USER  CHANGES
+##  1.0     20240317  ADDF  Initial version
+##
+############################################################################
 
 # Define variables
-nameSession=${1:-"tmux"}
-nameWindow1="Jump Server"
-nameWindow2="Remote Servers"
+# Socket is not necessary as we are using the user's default socket
+SESSION=${1:-"tmux"}
+WINDOW1="localhost"
+WINDOWN="remote x4"
 
-# Determine if the session already exists
-tmux has-session -t "${nameSession}" 2>/dev/null
+# It is not necessary to ensure the directory exists, it will be created automatically
 
-# If the session does not exist, create it
-# Otherwise, create two new windows
+
+# Check if the session already exists, used for the if-statement below
+tmux has-session -t "${SESSION}" 2>/dev/null
+
+# If the session does not exist, create a new one with two windows
 if [ $? != 0 ]
 then
-	tmux new-session -s "${nameSession}" -n "${nameWindow1}" -d
-	tmux new-window -t "${nameSession}" -n "${nameWindow2}"
-else
-	tmux new-window -t "${nameSession}" -n "${nameWindow1}"
-	tmux new-window -t "${nameSession}" -n "${nameWindow2}"
+	# Create new session and two windows
+	tmux new-session -s "${SESSION}" -n "${WINDOW1}" -d
+	tmux new-window -t "${SESSION}" -n "${WINDOW2}"
+
 fi
 
-# Split window 2 into four different panes
-tmux select-window -t "${nameSession}":"${nameWindow2}"
+# Split last window in four panes
+tmux select-window -t "${SESSION}":"${WINDOW2}"
 tmux split-window -h \; split-window -v \; select-pane -t 0 \; split-window -v
 tmux select-pane -t 0
 
-tmux attach-session -t "${nameSession}"
+# Attach to the session
+tmux attach-session -t "${SESSION}"
