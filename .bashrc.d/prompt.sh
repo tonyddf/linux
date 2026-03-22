@@ -4,8 +4,8 @@
 # │                                                                            │
 # │ Author:         Anthony Dominguez <Anthony.Dominguez@CondorEngineering.com │
 # │ Created:        2026-03-14                                                 │
-# │ Last Updated:   2026-03-17                                                 │
-# │ Version:        1.2.1                                                      │
+# │ Last Updated:   2026-03-18                                                 │
+# │ Version:        1.3.1                                                      │
 # │ Usage:          source prompt.sh                                           │
 # │                                                                            │
 # │ Notes:          none                                                       │
@@ -15,7 +15,8 @@
 # │ 1.0.0  2026-03-14  Tony        Initial version                             │
 # │ 1.1.0  2026-03-15  Tony        Added information for git branch            │
 # │ 1.2.0  2026-03-15  Tony        Added help option                           │
-# │ 1.2.1  2026-03-17  Tony        Changed script name                         │
+# │ 1.3.0  2026-03-17  Tony        Separated zsh and bash scripts              │
+# │ 1.3.1  2026-03-18  Tony        Improved the color workflow                 │
 # └────────────────────────────────────────────────────────────────────────────┘
 
 # Define the usage function
@@ -24,12 +25,12 @@ usage() {
 Usage: source $( basename "${0}" )
        [ -h | --help ]
 
-Configures a custom prompt for interactive Bash or Zsh shells.
+Configures a custom prompt for interactive Bash shells.
 
 The prompt displays:
   - user@host
   - Full current working directory
-  - Git repository information when inside a Git working tree, which
+  - git repository information when inside a git working tree, which
     includes:
       Current branch name
       Number of commits ahead of the upstream branch (↑N)
@@ -38,14 +39,14 @@ The prompt displays:
 
 The prompt colors depend on:
   - The user, if root then user is colored red
-  - The Git branch is colored based on repository state:
-      Green if branch is up to date
-      Yellow if working tree contains uncommitted changes
+  - The git branch is colored based on repository state:
+      Red if working directory has uncommitted changes
+      Yellow if changes are staged but not committed
       Magenta if branch diverges from its upstream
+      Green if branch is clean and up to date
 
 This file is intended to be sourced from a shell configuration
-file (e.g. ~/.bashrc or ~/.zshrc) and has no effect in
-non-interactive shells.
+file (e.g. ~/.bashrc) and has no effect in non-interactive shells.
 
 RETURN CODES
   0       Success
@@ -68,6 +69,7 @@ do
       ;;
     -h | --help )
       usage
+      shift
       return 0
       ;;
     * )
@@ -76,56 +78,6 @@ do
       ;;
   esac
 done
-
-
-# Run on interactive bash shell
-if [[ -n "${BASH_VERSION}" && $- =~ i ]]
-then
-  # Define colors
-  RESET='\[\e[0m\]'
-  RED='\[\e[31m\]'
-  GREEN='\[\e[32m\]'
-  BLUE='\[\e[34m\]'
-  MAGENTA='\[\e[35m\]'
-  YELLOW='\[\e[33m\]'
-# Run on interactive z shell
-elif [[ -n "${ZSH_VERSION}" && $- =~ i ]]
-then
-  autoload -U colors && colors
-  RESET='%f'
-  RED='%F{red}'
-  GREEN='%F{green}'
-  BLUE='%F{blue}'
-  MAGENTA='%F{magenta}'
-  YELLOW='%F{yellow}'
-else
-  return
-fi
-  
-# Load git prompt helper if available
-if command -v git 1>/dev/null 2>&1
-then
-  # For macOS
-  if [[ -r /Library/Developer/CommandLineTools/usr/share/git-core/git-prompt.sh ]]
-  then
-    source /Library/Developer/CommandLineTools/usr/share/git-core/git-prompt.sh
-  fi
-  # For RHEL v8
-  if [[ -r /usr/share/git-core/contrib/completion/git-prompt.sh ]]
-  then
-    source /usr/share/git-core/contrib/completion/git-prompt.sh
-  # For RHEL v9+
-  elif [[ -r /usr/share/git/completion/git-prompt.sh ]]
-  then
-    source /usr/share/git/completion/git-prompt.sh
-  fi
-fi
-
-# Enable git status indicators in the branch display
-GIT_PS1_SHOWDIRTYSTATE=1
-GIT_PS1_SHOWSTASHSTATE=1
-GIT_PS1_SHOWUNTRACKEDFILES=1
-GIT_PS1_SHOWUPSTREAM=auto
 
 
 # Function git Information
@@ -138,7 +90,9 @@ __git_prompt_info() {
   local ahead=0
   local behind=0
   local arrows=""
+  local untracked=""
   local dirty=""
+  local staged=""
 
   # Get current branch name
   # If HEAD is detached, fall back to short commit hash
@@ -153,7 +107,7 @@ __git_prompt_info() {
     # Output: "ahead behind"
     read ahead behind < <(
       git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null
-    )
+                         )
   fi
 
   # Show number of commits ahead of upstream
@@ -162,16 +116,21 @@ __git_prompt_info() {
   # Show number of commits behind upstream
   [[ ${behind} -gt 0 ]] && arrows+="↓${behind}"
 
-  # Check if working tree has modifications
-  # Faster than git status
+  # Check working tree for untracked files
+  git ls-files --others --exclude-standard --directory 2>/dev/null | grep -q . && untracked="?"
+
+  # Check working tree for unstaged changes
   git diff --no-ext-diff --quiet --exit-code 2>/dev/null || dirty="*"
 
+  # Check working tree for staged but uncommitted changes
+  git diff --no-ext-diff --quiet --cached --exit-code 2>/dev/null || staged="+"
+
   # Print formatted git information
-  printf "%s\t%s\t%s\n" "${branch}${arrows}${dirty}" "${ahead}" "${behind}"
+  printf "%s\t%s\t%s\n" "${branch}${arrows}${dirty}${untracked}${staged}" "${ahead}" "${behind}"
 }
 
 
-# Function Prompt Update
+# Function prompt update
 __update_ps1() {
   # Change user color and prompt char based on privilege level
   if [[ ${EUID} -eq 0 ]]
@@ -193,42 +152,70 @@ __update_ps1() {
   IFS=$'\t' read -r branch_info ahead behind < <(__git_prompt_info)
 
   # Define color for git part of prompt
-  if [[ ${ahead} -gt 0 || ${behind} -gt 0 ]]
+  if [[ "${branch_info}" =~ [*?] ]]
   then
-    # Out of sync with upstream
-    branch_color="${MAGENTA}"
-  elif [[ "${branch_info}" == *"*" ]]; then
-    # Dirty working tree
+    # Unstaged changes or untracked files
+    branch_color="${RED}"
+  elif [[ "${branch_info}" =~ [+] ]]
+  then
+    # Staged but uncommitted changed
     branch_color="${YELLOW}"
+  elif [[ ${ahead} -gt 0 || ${behind} -gt 0 ]]
+  then
+    # Diverged from upstream
+    branch_color="${MAGENTA}"
+  else
+    # Clean and up to date
+    branch_color="${GREEN}"
   fi
 
   # Define prompt without git
-  if [[ -n "${BASH_VERSION}" ]]
-  then
-    # Base prompt for bash
-    PROMPT="${USER_COLOR}\u${RESET}@\h:\w"
-  elif [[ -n "${ZSH_VERSION}" ]]
-  then
-    # Base prompt for z
-    PROMPT="${USER_COLOR}%n${RESET}@%m:%~"
-  fi
+  PS1="${USER_COLOR}\u${RESET}@\h:\w"
 
   # Append git branch information to prompt
   if [[ -n "${branch_info}" ]]
   then
-    PROMPT+=" ${branch_color}(${branch_info})${RESET}"
+    PS1+=" ${branch_color}(${branch_info})${RESET}"
   fi
 
-  # Append Final prompt symbol
-  PROMPT+=" ${PROMPT_CHAR} "
+  # Append final prompt symbol
+  PS1+=" ${PROMPT_CHAR} "
 }
 
+# Run on interactive Bash shell
+if [[ -n "${BASH_VERSION}" && $- =~ i ]]
+then
+  # Define colors
 
-# Hook prompt update into the current shell
-if [[ -n "${BASH_VERSION}" ]]
-then
+  RESET='\[\e[0m\]'
+  RED='\[\e[31m\]'
+  GREEN='\[\e[32m\]'
+  BLUE='\[\e[34m\]'
+  MAGENTA='\[\e[35m\]'
+  YELLOW='\[\e[33m\]'
+
+  # Load git prompt helper if available
+  if command -v git 1>/dev/null 2>&1
+  then
+    # For RHEL v8
+    if [[ -r /usr/share/git-core/contrib/completion/git-prompt.sh ]]
+    then
+      source /usr/share/git-core/contrib/completion/git-prompt.sh
+    # For RHEL v9+
+    elif [[ -r /usr/share/git/completion/git-prompt.sh ]]
+    then
+      source /usr/share/git/completion/git-prompt.sh
+    fi
+  fi
+  
+  # Enable git status indicators in the branch display
+  GIT_PS1_SHOWDIRTYSTATE=1
+  GIT_PS1_SHOWSTASHSTATE=1
+  GIT_PS1_SHOWUNTRACKEDFILES=1
+  GIT_PS1_SHOWUPSTREAM=auto
+  
+  # Trigger prompt update into current shell
   PROMPT_COMMAND="__update_ps1"
-elif [[ -n "${ZSH_VERSION}" ]]
-then
-  precmd() { __update_ps1; }
+else
+  return
 fi
